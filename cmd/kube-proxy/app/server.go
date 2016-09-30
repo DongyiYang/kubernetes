@@ -50,6 +50,11 @@ import (
 	utilsysctl "k8s.io/kubernetes/pkg/util/sysctl"
 	"k8s.io/kubernetes/pkg/util/wait"
 
+	"k8s.io/kubernetes/pkg/proxy/connectioncounter"
+	"k8s.io/kubernetes/pkg/proxy/flowcollector"
+	proxyserver "k8s.io/kubernetes/pkg/proxy/server"
+	utilconntrack "k8s.io/kubernetes/pkg/util/conntrack"
+
 	"github.com/golang/glog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -64,6 +69,9 @@ type ProxyServer struct {
 	Recorder     record.EventRecorder
 	Conntracker  Conntracker // if nil, ignored
 	ProxyMode    string
+
+	ConnectionCounter *connectioncounter.ConnectionCounter
+	FlowCollector     *flowcollector.FlowCollector
 }
 
 const (
@@ -90,16 +98,20 @@ func NewProxyServer(
 	recorder record.EventRecorder,
 	conntracker Conntracker,
 	proxyMode string,
+	connectionCounter *connectioncounter.ConnectionCounter,
+	flowCollector *flowcollector.FlowCollector,
 ) (*ProxyServer, error) {
 	return &ProxyServer{
-		Client:       client,
-		Config:       config,
-		IptInterface: iptInterface,
-		Proxier:      proxier,
-		Broadcaster:  broadcaster,
-		Recorder:     recorder,
-		Conntracker:  conntracker,
-		ProxyMode:    proxyMode,
+		Client:            client,
+		Config:            config,
+		IptInterface:      iptInterface,
+		Proxier:           proxier,
+		Broadcaster:       broadcaster,
+		Recorder:          recorder,
+		Conntracker:       conntracker,
+		ProxyMode:         proxyMode,
+		ConnectionCounter: connectionCounter,
+		FlowCollector:     flowCollector,
 	}, nil
 }
 
@@ -250,6 +262,17 @@ func NewProxyServerDefault(config *options.ProxyServerConfig) (*ProxyServer, err
 	endpointsConfig := proxyconfig.NewEndpointsConfig()
 	endpointsConfig.RegisterHandler(endpointsHandler)
 
+	// Create connection counter and flow collector, then register them to endpoint handler.
+	c, err := utilconntrack.New()
+	if err != nil {
+		panic(err)
+	}
+	connectionCounter := connectioncounter.NewConnectionCounter(c)
+	flowCollector := flowcollector.NewFlowCollector()
+
+	endpointsConfig.RegisterHandler(connectionCounter)
+	endpointsConfig.RegisterHandler(flowCollector)
+
 	proxyconfig.NewSourceAPI(
 		client,
 		config.ConfigSyncPeriod,
@@ -266,7 +289,7 @@ func NewProxyServerDefault(config *options.ProxyServerConfig) (*ProxyServer, err
 
 	conntracker := realConntracker{}
 
-	return NewProxyServer(client, config, iptInterface, proxier, eventBroadcaster, recorder, conntracker, proxyMode)
+	return NewProxyServer(client, config, iptInterface, proxier, eventBroadcaster, recorder, conntracker, proxyMode, connectionCounter, flowCollector)
 }
 
 // Run runs the specified ProxyServer.  This should never exit (unless CleanupAndExit is set).
@@ -329,9 +352,29 @@ func (s *ProxyServer) Run() error {
 	// Birth Cry after the birth is successful
 	s.birthCry()
 
+	s.startMonitor()
+
 	// Just loop forever for now...
 	s.Proxier.SyncLoop()
 	return nil
+}
+
+func (s *ProxyServer) startMonitor() {
+	go proxyserver.ListenAndServeProxyServer(s.ConnectionCounter, s.FlowCollector)
+
+	// Collect connection and flow information every second.
+	go func() {
+		for range time.Tick(5 * time.Second) {
+
+			glog.V(3).Infof("~~~~~~~~~~~~~~~~   Connection Counter ~~~~~~~~~~~~~~~~~~~~")
+			s.ConnectionCounter.ProcessConntrackConnections()
+
+			glog.V(3).Infof("----------------   Flow Collector      ------------------------")
+			s.FlowCollector.TrackFlow()
+			glog.V(3).Infof("##########################################################")
+			fmt.Println()
+		}
+	}()
 }
 
 func getConntrackMax(config *options.ProxyServerConfig) (int, error) {
