@@ -347,6 +347,16 @@ func (s *ProxyServer) Run() error {
 				return err
 			}
 		}
+
+		// Enable conntrack acct and timestamp.
+		err = s.Conntracker.SetAcct(1)
+		if err != nil {
+			return err
+		}
+		err = s.Conntracker.SetTimestamp(1)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Birth Cry after the birth is successful
@@ -364,15 +374,12 @@ func (s *ProxyServer) startMonitor() {
 
 	// Collect connection and flow information every second.
 	go func() {
-		for range time.Tick(5 * time.Second) {
-
+		for range time.Tick(1 * time.Second) {
 			glog.V(3).Infof("~~~~~~~~~~~~~~~~   Connection Counter ~~~~~~~~~~~~~~~~~~~~")
 			s.ConnectionCounter.ProcessConntrackConnections()
-
 			glog.V(3).Infof("----------------   Flow Collector      ------------------------")
 			s.FlowCollector.TrackFlow()
 			glog.V(3).Infof("##########################################################")
-			fmt.Println()
 		}
 	}()
 }

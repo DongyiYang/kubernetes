@@ -12,9 +12,7 @@ import (
 )
 
 // Flow collector requires user to turn on nf_conntrack_acct and nf_conntrack_timestamp
-
 type FlowCollector struct {
-
 	// Protects endpointsSet.
 	mu sync.Mutex
 
@@ -86,7 +84,6 @@ func (this *FlowCollector) syncConntrackInfo() {
 		panic(err)
 	}
 	if len(infos) < 1 {
-		glog.Infof("No Data")
 		return
 	}
 
@@ -142,10 +139,6 @@ func (this *FlowCollector) flowConnectionFilterFunc(c conntrack.ConntrackInfo) b
 		return false
 	}
 
-	if c.TCPState == conntrack.TCPState_ESTABLISHED {
-		glog.V(4).Infof("EEEEEEEE  ESTABLISHED conn is %v \n", c)
-	}
-
 	return true
 }
 
@@ -154,7 +147,6 @@ func (this *FlowCollector) GetAllFlows() []*Flow {
 	for _, flow := range this.flows {
 		result = append(result, flow)
 	}
-	glog.V(4).Infof("Get All flows %++v", result)
 
 	return result
 }

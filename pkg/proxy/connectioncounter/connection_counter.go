@@ -67,7 +67,7 @@ func (this *ConnectionCounter) OnEndpointsUpdate(allEndpoints []api.Endpoints) {
 
 // Clear the connection counter map.
 func (tc *ConnectionCounter) Reset() {
-	glog.V(3).Infof("Inside reset connection counter")
+	glog.V(3).Infof("Reset connection counter")
 	counterMap := make(map[string]map[string]int)
 
 	tc.counter = counterMap
@@ -85,18 +85,17 @@ func (tc *ConnectionCounter) Count(infos []*countInfo) {
 		endpointAddress := info.endpointAddress
 		epMap, ok := tc.counter[serviceName]
 		if !ok {
-			glog.Infof("Service %s is not tracked. Now initializing in map", serviceName)
+			glog.V(4).Infof("Service %s is not tracked. Now initializing in map", serviceName)
 
 			epMap = make(map[string]int)
 		}
 		count, ok := epMap[endpointAddress]
 		if !ok {
-			glog.Infof("Endpoint %s for Service %s is not tracked. Now initializing in map", endpointAddress, serviceName)
+			glog.V(4).Infof("Endpoint %s for Service %s is not tracked. Now initializing in map", endpointAddress, serviceName)
 			count = 0
 		}
 		epMap[endpointAddress] = count + 1
 		tc.counter[serviceName] = epMap
-		glog.V(5).Infof("counter map is %++v", tc)
 		glog.V(4).Infof("Connection count of %s is %d.", endpointAddress, epMap[endpointAddress])
 	}
 }
@@ -144,16 +143,8 @@ func (this *ConnectionCounter) ProcessConntrackConnections() {
 func (this *ConnectionCounter) syncConntrack() {
 	connections := this.conntrack.Connections()
 	if len(connections) > 0 {
-		glog.V(3).Infof("Connections:\n")
+		glog.V(4).Infof("Connections:\n")
 		for _, cn := range connections {
-			//	address := cn.Local
-			//	glog.V(4).Infof("Get Connection %++v", cn)
-			//	svcName, exist := this.endpointsMap[address]
-			//	if !exist {
-			//		glog.Infof("Current Eps are :%++v", this.endpointsMap)
-			//		glog.Errorf("\tError getting svc name based on endpoints address: %s", address)
-			//		continue
-			//	}
 			infos := this.preProcessConnections(cn)
 			this.Count(infos)
 		}
@@ -175,5 +166,4 @@ func (this *ConnectionCounter) preProcessConnections(c conntrack.TCPConnection) 
 		infos = append(infos, &countInfo{svcName.String(), c.Remote})
 	}
 	return infos
-
 }

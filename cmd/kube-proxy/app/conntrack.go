@@ -30,6 +30,8 @@ import (
 type Conntracker interface {
 	SetMax(max int) error
 	SetTCPEstablishedTimeout(seconds int) error
+	SetAcct(i int) error
+	SetTimestamp(i int) error
 }
 
 type realConntracker struct{}
@@ -61,6 +63,16 @@ func (realConntracker) SetMax(max int) error {
 func (realConntracker) SetTCPEstablishedTimeout(seconds int) error {
 	glog.Infof("Setting nf_conntrack_tcp_timeout_established to %d", seconds)
 	return sysctl.New().SetSysctl("net/netfilter/nf_conntrack_tcp_timeout_established", seconds)
+}
+
+func (realConntracker) SetAcct(i int) error {
+	glog.Infof("Set nf_conntrack_acct to %d.", i)
+	return sysctl.New().SetSysctl("net/netfilter/nf_conntrack_acct", i)
+}
+
+func (realConntracker) SetTimestamp(i int) error {
+	glog.Infof("Set nf_conntrack_timestamp to %d.", i)
+	return sysctl.New().SetSysctl("net/netfilter/nf_conntrack_timestamp", i)
 }
 
 // isSysFSWritable checks /proc/mounts to see whether sysfs is 'rw' or not.
